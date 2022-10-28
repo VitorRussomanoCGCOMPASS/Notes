@@ -1,0 +1,588 @@
+
+```{R}
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("ggthemes")
+library("tidyverse")
+library(scales)
+
+aaa <- read.csv("C:/Users/Vitor Russomano/VsCodeProjects/Notes/APS - Corporate/AAA.csv")
+bbb <- read.csv("C:/Users/Vitor Russomano/VsCodeProjects/Notes/APS - Corporate/BAA.csv")
+library(hrbrthemes)
+
+merged_raw <- as_tibble(merge(aaa, bbb))
+merged_raw$DATE = as.Date(merged_raw$DATE, format-"%Y-%m-%d")
+
+
+merged_raw %>%
+    pivot_longer(cols = c("AAA", "BAA"), names_to = ("Rating"), values_to = ("Yield")) -> merged
+
+merged %>% mutate(DATE = as.Date(DATE)) -> merged
+
+```
+
+
+```{R}
+
+
+windows();merged %>% ggplot()+
+    geom_area(aes(x=DATE,y=Yield,fill=Rating) ,alpha=0.7, position="identity") +
+    scale_x_date(breaks=pretty_breaks(), labels= date_format("%m-%Y")) + 
+scale_fill_manual(values=c("#1f4693", "#a7cbe2")) +    theme_economist()+ 
+         labs(y="Yield",
+       title="Time comparison between Bonds Index",
+       subtitle="Aaa and Baa by Moody`s", caption="Source: Own Elaboration", labels=c("Aaa","Baa")) + 
+          theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+ggsave("test.png")
+
+```
+
+
+```{R}
+
+
+merged %>% group_by(Rating) %>% summarise(min = min(Yield),
+            q1 = quantile(Yield, 0.25),
+            median = median(Yield),
+            mean = mean(Yield),
+            q3 = quantile(Yield, 0.75),
+            max = max(Yield))
+
+```
+
+```{R}
+merged %>% pivot_wider(names_from='Rating',values_from = 'Yield') -> merged_wide
+
+merged_wide %>% mutate(diff =BAA-AAA, DATE= as.Date(DATE, format="%Y-%m-%d")) -> merged_wide
+
+
+
+support<-data.frame(start= c(as.Date("1929-01-01"),as.Date("1979-01-01"),as.Date("2008-01-01")), 
+end=  c(as.Date("1939-12-31"),as.Date("1983-01-01"), as.Date("2010-12-31")),
+classif= c("Great Depression","Oil Crisis","Market Crash"))
+
+
+
+
+
+windows();ggplot(merged_wide, aes(x=DATE, y=diff))  + 
+geom_line(size=1) + 
+scale_x_date(breaks=pretty_breaks(), labels= date_format("%m-%Y")) +  
+theme_economist()  + 
+    labs(y="Yield difference",
+    title="Time comparison between Bonds Index",
+       subtitle="Aaa and Baa by Moody`s", caption="Source: Own Elaboration") +
+  geom_rect(
+    data= support , aes(NULL,NULL,xmin = start, xmax = end,fill=classif), 
+    ymin = -Inf, ymax = Inf, alpha = 0.4)+
+    scale_fill_brewer() +
+        theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+ggsave("test.png")
+
+```
+
+```{R}
+
+
+windows();ggplot(merged, aes(x=Yield,fill=Rating))  +    
+ geom_histogram( color="#e9ecef", alpha=0.5, position = 'identity') +
+  scale_fill_brewer() +
+    theme_economist() +
+             labs(x="Yield",
+       title="Distribution comparison between Bonds Index",
+       subtitle="Aaa and Baa by Moody`s",caption="Source: Own Elaboration") +
+
+    theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+ggsave('test.png')
+
+
+```
+
+
+```{R}
+
+
+windows();ggplot(merged_wide, aes(x=diff)) + geom_histogram(binwidth = 0.08) + 
+    theme_economist() +
+             labs(x="Yield",
+       title="Distribution of the difference between Bonds Index",
+       subtitle="Aaa and Baa by Moody`s",caption="Source: Own Elaboration") +
+
+        theme(panel.border = element_blank(),
+        legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+ggsave("test.png")
+
+```
+
+```{R}
+
+library(moments)
+skewness(merged_wide$diff)
+
+
+merged %>% group_by(Rating) %>% summarise(skewness(Yield))
+
+
+resaov = aov(Yield ~  Rating, data=merged)
+TukeyHSD(resaov)
+
+
+```
+
+
+```{R}
+
+
+aaadif <- read.csv("C:/Users/Vitor Russomano/VsCodeProjects/Notes/APS - Corporate/AAA10YM.csv")
+bbbdif <- read.csv("C:/Users/Vitor Russomano/VsCodeProjects/Notes/APS - Corporate/BAA10YM.csv")
+
+
+mergeddif <- as_tibble(merge(aaadif, bbbdif))
+
+
+
+mergeddif%>%
+    pivot_longer(cols = c("AAA", "BAA"), names_to = ("Rating"), values_to = ("Yield")) %>%
+    mutate(DATE = as.Date(DATE, format = "%Y-%m-%d")) -> mergeddif
+
+mergeddif%>% mutate(DATE = as.Date(DATE)) -> mergeddif
+
+
+mergeddif %>% pivot_longer(cols=c("AAA10YM","BAA10YM") , names_to="Rating")-> longer_diff
+
+windows();ggplot(longer_diff, aes(x=Rating, y=value, fill=Rating)) + 
+geom_boxplot()  + theme_economist() +    
+ scale_fill_manual(values=c("#69b3a2", "#404080")) +        
+ theme(panel.border = element_blank(),
+        legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+
+```
+
+
+```{R}
+
+
+wilcox.test(aaadif$AAA10YM, mu=0, conf.int = TRUE)
+wilcox.test(bbbdif$BAA10YM, mu=0, conf.int = TRUE)
+
+
+```
+
+```{R}
+
+
+support<-data.frame(start= c(as.Date("1979-01-01"),as.Date("2008-01-01")), 
+end=  c(as.Date("1983-01-01"), as.Date("2010-12-31")),
+classif= c("Oil Crisis","Market Crash"))
+
+
+mergeddif %>% mutate(diff = BAA10YM-AAA10YM) -> mergeddif
+
+
+
+windows();ggplot(mergeddif, aes(x=DATE))  + 
+geom_line(aes(y=AAA10YM)) +
+geom_line(aes(y=BAA10YM)) +
+scale_x_date(breaks=pretty_breaks(), limits=as.Date(c("1955-01-01" , "2021-01-01" )) , labels= date_format("%m-%Y")) +  
+theme_economist()  + 
+     scale_fill_brewer()  +        
+     labs(y="Yield",
+       title="Bonds Index Relative to Yield on 10-Year Treasury Const. Maturity ",
+       subtitle="Aaa and Baa by Moody`s",caption="Source: Own Elaboration") +
+  geom_rect(
+    data= support , aes(NULL,NULL,xmin = start, xmax = end,fill=classif), 
+    ymin = -Inf, ymax = Inf, alpha = 0.4)+
+        theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+ggsave("test.png")
+
+```
+
+
+
+
+```{R}
+
+library(ggridges)
+library(hrbrthemes)
+
+
+mergeddif %>% pivot_longer(cols= c("AAA10YM","BAA10YM") , names_to = "Class") -> long_mergeddif
+windows();ggplot(long_mergeddif, aes(x=value, y=Class, fill=Class)) +   geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+  theme_economist() + scale_fill_brewer() + 
+    theme(
+      legend.position="none",
+      panel.spacing = unit(0.1, "lines"),
+      strip.text.x = element_text(size = 8)
+    ) + 
+         labs(x="Yield",
+       title="Bonds Index Relative to Yield on 10-Year Treasury Const. Maturity ",
+       subtitle="Aaa and Baa by Moody`s",caption='Source: Own Elaboration') +
+               theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+ggsave("test.png")
+
+
+```
+
+
+
+
+```{R}
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("ggthemes")
+library('reshape2')
+
+corp <- as_tibble(read.csv("C:/Users/Vitor Russomano/VsCodeProjects/Notes/APS - Corporate/corporate_rating.csv"))
+
+
+```
+```{R}
+
+corp %>% group_by(Rating) %>% count()
+
+
+mapp = data.frame(Moodys = c('Aaa','Aa','A','Baa','Ba','B','Caa/Ca','C'), 
+Fitch = c('AAA','AA','A','BBB','BB','B','C/CC/CCC','D'),
+Sp =c('AAA','AA','A', 'BBB','BB','B','C/CC/CCC',' D'),
+Grade= c('Investment','Investment','Investment','Investment','Junk','Junk','Junk','Junk'))
+
+
+mapp = reshape2::melt(mapp,id='Grade',value.name='Rating')
+
+as_tibble(merge(corp,mapp,by='Rating',inner=)) ->  corp 
+corp %>% group_by(Grade) %>% count()
+
+ggplot(corp, aes(Grade)) + 
+  geom_bar(position="dodge", stat="count") + 
+  theme_economist() + 
+        labs(x="Grade",
+       title="Corporate bonds sample distribution",
+       subtitle="Junk and Investment classification",
+       caption = "Source: Own Elaboration") +
+     theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+ggsave("test.png")
+```
+
+
+```{r}
+library(caTools)
+library(rpart)
+
+library(rpart.plot)
+library(randomForest)
+library(caret)
+
+corp$Grade = factor(corp$Grade)
+
+corp %>% select(-c('Rating','Symbol','Rating.Agency.Name','Date','Sector','Name','variable')) -> corpmodel
+corpmodel %>% na.exclude() -> corpmodel
+
+sample <- sample.split(corpmodel$Grade, SplitRatio = 0.7)
+train_data  <- subset(corpmodel, sample == TRUE)
+test_data   <- subset(corpmodel, sample == FALSE)
+
+
+classifier = rpart(Grade ~ ., train_data)
+
+p0 = predict(classifier, train_data,type="class")
+confusionMatrix(p0,train_data$Grade)
+
+p1= predict(classifier, test_data, type="class")
+confusionMatrix(p1,test_data$Grade)
+
+
+rpart.plot(classifier)
+
+rf = randomForest(Grade ~ ., data = train_data , na.action=na.roughfix)
+p1 = predict(rf, train_data)
+confusionMatrix(p1, train_data$Grade)
+
+p1 =predict(rf, test_data)
+confusionMatrix(p1, test_data$Grade)
+
+
+df <- data.frame(imp = classifier$variable.importance)
+
+df2 <- df %>% 
+  tibble::rownames_to_column() %>% 
+  dplyr::rename("variable" = rowname) %>% 
+  dplyr::arrange(imp) %>%
+  dplyr::mutate(variable = forcats::fct_inorder(variable))
+windows();ggplot2::ggplot(df2) +
+  geom_col(aes(x = variable, y = imp),
+           col = "black", show.legend = F) +
+  coord_flip() +
+  scale_fill_grey() +
+  theme_economist()  +
+    labs(
+      x     = "Feature",
+      y     = "Mean Gini Decrease",
+      title = "Feature Importance",
+      subtitle="Model: Decision Tree"
+    ) + 
+       xlab(NULL) + 
+     theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+
+
+windows();plot(rf)
+
+feat_imp_df <- importance(rf) %>% 
+    data.frame() %>% 
+    mutate(feature = row.names(.)) 
+windows();ggplot(feat_imp_df, aes(x = reorder(feature, MeanDecreaseGini), 
+                         y = MeanDecreaseGini)) +
+    geom_bar(stat='identity') +
+    coord_flip() +
+    theme_classic() +
+    labs(
+      x     = "Feature",
+      y     = "Mean Gini Decrease",
+      title = "Feature Importance",
+      subtitle="Model: Random Forest"
+    ) + 
+    theme_economist() + 
+           xlab(NULL) + 
+     theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+
+oob.err=double(25)
+test.err=double(25)
+
+#mtry is no of Variables randomly chosen at each split
+for(mtry in 1:25)
+{
+  rf= randomForest(train_data$Grade ~ ., data = train_data , na.action=na.roughfix, mtry=mtry)
+  #oob.err[mtry] = rf$oob #Error of all Trees fitted
+  
+  pred<- predict(rf, test_data, type="class") #Predictions on Test Set for each Tree
+  test.err[mtry]= sum(pred != test_data$Grade)
+  
+  cat(mtry," ")
+  
+}
+matplot(1:mtry , test.err, pch=19 ,type="b",ylab="Misclassification",xlab="Number of Predictors Considered at each Split")
+legend("topright",legend=c("Test Error"),pch=19)
+
+
+
+
+rf= randomForest(train_data$Grade ~ ., data = train_data , na.action=na.roughfix, mtry=10)
+
+pred <- predict(rf,train_data, type="class")
+confusionMatrix(pred,train_data$Grade)
+
+
+pred <- predict(rf, test_data, type="class")
+confusionMatrix(pred,test_data$Grade)
+
+
+
+pred1=predict(rf,type = "prob")[,2]
+library(ROCR)
+perf = prediction(pred1, train_data$Grade)
+# 1. Area under curve
+auc = performance(perf, "auc")@y.values[[1]]
+
+# 2. True Positive and Negative Rate
+pred3 = performance(perf, "tpr","fpr")
+# 3. Plot the ROC curve
+plot(pred3,main="ROC Curve for Random Forest",col=2,lwd=2)
+abline(a=0,b=1,lwd=2,lty=2,col="gray")
+
+
+```
+
+```{r}
+# Correlation plot
+# Introduction of the data
+library(ggplot2)
+library(ggthemes)
+library(GGally)
+corpmodel %>% select(-'Grade') -> numeric
+
+ggcorr(numeric, palette= "RdBu",label=TRUE, method=c("everything","pearson"),label_size = 2, size=3,nbreaks=5, hjust=0.8, layout.exp=2) + labs(
+       title="Correlation of numerical financial features" ,caption="Source: Own Elaboration") +theme_economist()+  theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+ggsave("test.png")
+```
+
+
+```{r}
+
+library(purrr)
+
+corpmodel %>% select(c(operatingCashFlowPerShare,returnOnAssets,netProfitMargin,operatingCashFlowSalesRatio,returnOnCapitalEmployed,pretaxProfitMargin,ebitPerRevenue,returnOnEquity,cashRatio,effectiveTaxRate)) -> selected_features
+
+
+selected_features %>%      map( ~ replace(.x, .x %in% boxplot.stats(.x)$out, NA)) %>%
+           bind_cols -> clean_selected
+
+
+clean_selected$Grade = corpmodel$Grade
+
+clean_selected %>% group_by(Grade) %>% summarise(across(everything(), .f = ('mean' = mean), na.rm = TRUE)) %>% t() -> mu
+
+clean_selected %>% group_by(Grade) %>% summarise(across(everything(), .f = ('std' = sd), na.rm = TRUE)) %>% t() -> std
+
+
+windows();clean_selected %>% pivot_longer(-Grade) %>% mutate(Grade =as.factor(Grade)) %>% ggplot(aes(value)) +
+ geom_density(alpha=0.4, aes(fill=Grade)) + 
+ facet_wrap(~name, scales='free_x')+
+theme_economist() + 
+scale_fill_brewer() +
+labs(
+       title="Density of selected financial features",caption="Source: Own Elaboration")  + 
+theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+
+ggsave('test.png')
+
+
+```
+```{r}
+t.test(operatingCashFlowPerShare~ Grade, data=clean_selected)
+t.test(returnOnAssets~ Grade, data=clean_selected)
+t.test(operatingCashFlowSalesRatio~ Grade, data=clean_selected)
+t.test(returnOnCapitalEmployed~ Grade, data=clean_selected)
+t.test(pretaxProfitMargin~ Grade, data=clean_selected)
+t.test(ebitPerRevenue~ Grade, data=clean_selected)
+t.test(returnOnEquity~ Grade, data=clean_selected)
+t.test(cashRatio~ Grade, data=clean_selected)
+t.test(effectiveTaxRate~ Grade, data=clean_selected)
+
+
+```
+
+```{r}
+library(GGally)
+
+windows();ggpairs(clean_selected,columns=1:4, aes(color=Grade, alpha=0.5),upper = list(continuous = wrap("cor", size = 2.5)),   lower = list(continuous = "smooth")) +scale_fill_brewer()
+
+
+
+
+
+ggcorr(selected_features, palette= "RdBu",label=TRUE, method=c("everything","pearson"),label_size = 2, size=3,nbreaks=5, hjust=0.8, layout.exp=2) + labs(
+       title="Correlation of selected financial features",caption="Source: Own Elaboration") +theme_economist() +
+     theme(panel.border = element_blank(),
+            legend.key = element_blank(),
+           axis.ticks = element_blank(),
+           panel.grid = element_blank(),
+           
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+               plot.background = element_rect(fill = "transparent",colour = NA))
+
+        
+
+
+```
+```{r}
+library(ggridges)
+library(ggplot2)
+corp %>% select(c(effectiveTaxRate,Sector)) %>%  map_if(is.numeric, ~ replace(.x, .x %in% boxplot.stats(.x)$out, NA))  %>% bind_cols-> cash
+cash$Sector = as.factor(cash$Sector)
+
+ggplot(cash, aes(x = effectiveTaxRate, y = Sector, fill = Sector)) +
+  geom_density_ridges() + labs(
+       title="Density of Effective Tax Rate",caption="Source: Own Elaboration") +
+  theme_ridges() + 
+  theme(legend.position = "none") +
+  scale_fill_brewer()
+
+ggsave("test.png")
+```
