@@ -80,9 +80,9 @@ data[["White Label", "Black Label", "Result"]]
 ###########
 
 
-
-data.groupby(['White Label','Black Label'])['Result'].value_counts().unstack().fillna(0)
-
+data.groupby(["White Label", "Black Label"])["Result"].value_counts().unstack().fillna(
+    0
+)
 
 
 ###############
@@ -92,14 +92,14 @@ data.assign(
 ).groupby(["White Label", "Black Label"]).agg(
     mean_int_result=("integer_result", "mean")
 ).reset_index().pipe(
-    lambda _: ggplot(_, aes(x="Black Label", y="mean_int_result",fill='Black Label'))
+    lambda _: ggplot(_, aes(x="Black Label", y="mean_int_result", fill="Black Label"))
     + geom_col()
-    + facet_wrap("White Label") 
-    + theme_minimal() 
-   + theme(axis_text_x=element_blank()))
+    + facet_wrap("White Label")
+    + theme_minimal()
+    + theme(axis_text_x=element_blank())
+)
 
 #################
-
 
 
 data.query('`White Label`!= "Beginner" &  `Black Label` != "Beginner"').groupby(
@@ -110,7 +110,7 @@ data.query('`White Label`!= "Beginner" &  `Black Label` != "Beginner"').groupby(
     columns={0: "Count"}
 ).pipe(
     lambda _: (
-        ggplot(round(_,3), aes("White Label", "Result", fill="Count"))
+        ggplot(round(_, 3), aes("White Label", "Result", fill="Count"))
         + geom_tile(aes(width=0.95, height=0.95))
         + scale_fill_distiller(direction=1)
         + geom_text(aes(label="Count"), size=4, fontweight="bold")
@@ -350,12 +350,43 @@ pandas.concat(
     ]
 ).apply(lambda x: pandas.to_numeric(x) if x.name == "value" else x).pipe(
     lambda _: ggplot(_, aes(x="value"))
-    + geom_density(aes( fill="variable") , alpha=0.4)
+    + geom_density(aes(fill="variable"), alpha=0.4)
     + facet_wrap("Label")
     + xlim(-1, 1)
     + theme_minimal()
+    + scale_fill_brewer()
 )
 
 
 # Compare top 10 and others in Mean CP Loss
 
+
+pandas.concat(
+    [
+        (
+            data.filter(["White Av CP Loss", "white_elo"])
+            .melt(
+                id_vars=["white_elo"],
+                value_vars=["White Av CP Loss"],
+            )
+            .rename(columns={"white_elo": "ELO"})
+            .explode("value")
+        ),
+        (
+            data.filter(["Black Av CP Loss", "black_elo"])
+            .melt(
+                id_vars=["black_elo"],
+                value_vars=["Black Av CP Loss"],
+            )
+            .rename(columns={"black_elo": "ELO"})
+            .explode("value")
+        ),
+    ]
+).apply(
+    lambda x: pandas.to_numeric(x, downcast="float")
+    if x.name in ["ELO", "value"]
+    else x
+).pipe(
+    lambda _: ggplot(_, aes(y="value", x="ELO", group="variable", colour="variable"))
+    + geom_line()
+)
