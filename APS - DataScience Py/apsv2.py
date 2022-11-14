@@ -169,7 +169,10 @@ evaluation = (
     evaluation.explode("Evaluations List")
     .reset_index()
     .rename(columns={"index": "game_number"})
-    .assign(Depth=lambda _: evaluation.groupby(_.game_number).cumcount())
+)
+# FIXME : This is messy
+evaluation["Depth"] = evaluation.groupby("game_number")["game_number"].transform(
+    "cumcount"
 )
 
 evaluation["Evaluations List"] = pandas.to_numeric(
@@ -178,56 +181,62 @@ evaluation["Evaluations List"] = pandas.to_numeric(
 
 
 (
-    evaluation.query("game_number==0").pipe(
+    evaluation.query("game_number==1").pipe(
         lambda _: (
-            ggplot(_, aes(x="Depth", y="Evaluations List", group=1)) + geom_line()
+            ggplot(_, aes(x="Depth", y="Evaluations List", group=1)) + geom_area()
         )
         + geom_hline(yintercept=0, linetype="dashed", color="red", size=1)
         + labs(title="Evaluation by Depth", caption="Fonte: Elaborada pelo autor")
         + theme_minimal()
+        + xlim(0, 55)
     )
 )
 
-############
+
+# TODO: IMPROVE
 (
     evaluation.groupby("Depth", as_index=False)
-    .agg(eval_mean=("Evaluations List", numpy.mean))
+    .agg(
+        eval_mean=("Evaluations List", numpy.mean),
+        eval_std=("Evaluations List", numpy.std),
+    )
     .pipe(
         lambda _: (
-            (ggplot(_, aes(x="Depth", y="eval_mean")) + geom_line())
+            (ggplot(_, aes(x="Depth", y="eval_mean", group=1)) + geom_line())
             + geom_hline(yintercept=0, linetype="dashed", color="red", size=1)
             + theme_minimal()
             + labs(
                 title="Mean evaluation by Depth", caption="Fonte: Elaborada pelo autor"
             )
-            + ylim(-1.5, 1.5)
+            + xlim(0, 120)
+            + ylim(0, 1)
+        )
+    )
+)
+
+
+(
+    evaluation.groupby("Depth", as_index=False)
+    .agg(
+        eval_mean=("Evaluations List", numpy.mean),
+        eval_std=("Evaluations List", numpy.std),
+    )
+    .pipe(
+        lambda _: (
+            (ggplot(_, aes(x="Depth", y="eval_std", group=1)) + geom_line())
+            + geom_hline(yintercept=0, linetype="dashed", color="red", size=1)
+            + theme_minimal()
+            + labs(
+                title="Standard Deviation by Depth",
+                caption="Fonte: Elaborada pelo autor",
+            )
             + xlim(0, 120)
         )
     )
 )
+
 ############
 
-
-# FIXME: Not showing enough data. Something is happening along the way.
-# FIXME: There are nan where it shouldnt be
-(
-    evaluation.groupby(
-        ["Depth", "White Label"],
-    )
-    .agg(eval_mean=("Evaluations List", numpy.mean))
-    .reset_index()
-    .rename(columns={"White Label": "white_label"})
-    .pipe(
-        lambda _: ggplot(_, aes(x="Depth", y="Evaluations List"))
-        + geom_area()
-        + geom_smooth(method="lm", color="grey", linetype="dotted")
-        + facet_wrap("white_label")
-        + geom_hline(yintercept=0, linetype="dashed", color="red", size=1)
-        + theme_minimal()
-        + labs(title="____", caption="Fonte: Elaborada pelo autor")
-        + xlim(0, 120)
-    )
-)
 
 ###########################
 # Difference in numerical ELO
@@ -302,53 +311,76 @@ topn = pandas.DataFrame(
 )
 
 
-data[data["White Name"].isin(list(topn["Player"]))].filter(
-    ["White Name", "White Av CP Loss"]
-).groupby("White Name").agg(w_cp_mean=("White Av CP Loss", numpy.mean)).merge(
-    topn, left_index=True, right_on="Player"
-).sort_values(
-    "Ranking (ELO)"
-)
+# HERE, IT IS THE STANDARD DEVIATION BETWEEN THE GAMES!
 
 
-data[data["Black Name"].isin(list(topn["Player"]))].filter(
-    ["Black Name", "Black Av CP Loss"]
-).groupby("Black Name").agg(b_cp_mean=("Black Av CP Loss", numpy.mean)).merge(
-    topn, left_index=True, right_on="Player"
-).sort_values(
-    "Ranking (ELO)"
+pandas.concat(
+    [
+        data[data["White Name"].isin(list(topn["Player"]))]
+        .filter(["White Name", "White Av CP Loss"])
+        .groupby("White Name")
+        .agg(
+            cp_mean=("White Av CP Loss", numpy.mean),
+            cp_std=("White Av CP Loss", numpy.std),
+        )
+        .assign(color="White")
+        .merge(topn, left_index=True, right_on="Player")
+        .sort_values("Ranking (ELO)"),
+        data[data["Black Name"].isin(list(topn["Player"]))]
+        .filter(["Black Name", "Black Av CP Loss"])
+        .groupby("Black Name")
+        .agg(
+            cp_mean=("Black Av CP Loss", numpy.mean),
+            cp_std=("Black Av CP Loss", numpy.std),
+        )
+        .assign(color="Black")
+        .merge(topn, left_index=True, right_on="Player")
+        .sort_values("Ranking (ELO)"),
+    ]
+).pipe(
+    lambda _: ggplot(
+        _, aes(y="cp_mean", x="reorder(Player,ELO)", color="color", size="cp_std")
+    )
+    + geom_point()
+    + theme_minimal()
+    + scale_color_grey()
+    + theme(axis_text_x=element_text(angle=20))
 )
+
 
 
 # General One
+
 
 
 data["White CP Loss List"] = data["White CP Loss List"].apply(literal_eval)
 data["Black CP Loss List"] = data["Black CP Loss List"].apply(literal_eval)
 
 
-pandas.concat(
+long_cp = pandas.concat(
     [
         (
-            data.filter(["White CP Loss List", "White Label"])
+            data.filter(["White CP Loss List", "White Label", "white_elo"])
             .melt(
-                id_vars=["White Label"],
+                id_vars=["White Label", "white_elo"],
                 value_vars=["White CP Loss List"],
             )
-            .rename(columns={"White Label": "Label"})
+            .rename(columns={"White Label": "Label", "white_elo": "ELO"})
             .explode("value")
         ),
         (
-            data.filter(["Black CP Loss List", "Black Label"])
+            data.filter(["Black CP Loss List", "Black Label", "black_elo"])
             .melt(
-                id_vars=["Black Label"],
+                id_vars=["Black Label", "black_elo"],
                 value_vars=["Black CP Loss List"],
             )
-            .rename(columns={"Black Label": "Label"})
+            .rename(columns={"Black Label": "Label", "black_elo": "ELO"})
             .explode("value")
         ),
     ]
-).apply(lambda x: pandas.to_numeric(x) if x.name == "value" else x).pipe(
+)
+
+long_cp.apply(lambda x: pandas.to_numeric(x) if x.name == "value" else x).pipe(
     lambda _: ggplot(_, aes(x="value"))
     + geom_density(aes(fill="variable"), alpha=0.4)
     + facet_wrap("Label")
@@ -357,36 +389,25 @@ pandas.concat(
     + scale_fill_brewer()
 )
 
-
-# Compare top 10 and others in Mean CP Loss
-
-
-pandas.concat(
-    [
-        (
-            data.filter(["White Av CP Loss", "white_elo"])
-            .melt(
-                id_vars=["white_elo"],
-                value_vars=["White Av CP Loss"],
-            )
-            .rename(columns={"white_elo": "ELO"})
-            .explode("value")
-        ),
-        (
-            data.filter(["Black Av CP Loss", "black_elo"])
-            .melt(
-                id_vars=["black_elo"],
-                value_vars=["Black Av CP Loss"],
-            )
-            .rename(columns={"black_elo": "ELO"})
-            .explode("value")
-        ),
-    ]
-).apply(
-    lambda x: pandas.to_numeric(x, downcast="float")
-    if x.name in ["ELO", "value"]
-    else x
-).pipe(
-    lambda _: ggplot(_, aes(y="value", x="ELO", group="variable", colour="variable"))
-    + geom_line()
+long_cp.query('Label != "Beginner"').groupby("ELO").agg(
+    var=("value", numpy.std), mean=("value", numpy.mean)
+).reset_index().pipe(
+    lambda _: ggplot(_, aes(x="ELO", y="mean"))
+    + geom_point(alpha=0.4)
+    + geom_smooth()
+    + ylim(0, 100)
 )
+
+
+long_cp.query('Label != "Beginner"').groupby("ELO").agg(
+    std=("value", numpy.std), mean=("value", numpy.mean)
+).reset_index().pipe(
+    lambda _: ggplot(_, aes(x="ELO", y="std"))
+    + geom_point(alpha=0.4)
+    + geom_smooth()
+    + ylim(0, 200)
+)
+
+
+# TODO: COUPLE MORE GRAPHS
+# TODO : MODEL
