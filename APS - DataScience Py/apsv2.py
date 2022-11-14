@@ -348,9 +348,7 @@ pandas.concat(
 )
 
 
-
 # General One
-
 
 
 data["White CP Loss List"] = data["White CP Loss List"].apply(literal_eval)
@@ -407,6 +405,9 @@ long_cp.query('Label != "Beginner"').groupby("ELO").agg(
     + geom_smooth()
     + ylim(0, 200)
 )
+
+
+long_cp.groupby("Label").agg(mean=("value", numpy.mean), std=("value", numpy.std))
 
 
 # TODO: COUPLE MORE GRAPHS
