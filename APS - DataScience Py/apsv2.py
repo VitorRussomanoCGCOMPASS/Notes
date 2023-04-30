@@ -11,7 +11,6 @@ data = data.drop(
     axis=1,
 )
 ############
-
 table = {
     "Title": [
         "Super Grandmaster",
@@ -324,8 +323,7 @@ pandas.concat(
             cp_std=("White Av CP Loss", numpy.std),
         )
         .assign(color="White")
-        .merge(topn, left_index=True, right_on="Player")
-        .sort_values("Ranking (ELO)"),
+        .merge(topn, left_index=True, right_on="Player"),
         data[data["Black Name"].isin(list(topn["Player"]))]
         .filter(["Black Name", "Black Av CP Loss"])
         .groupby("Black Name")
@@ -334,18 +332,10 @@ pandas.concat(
             cp_std=("Black Av CP Loss", numpy.std),
         )
         .assign(color="Black")
-        .merge(topn, left_index=True, right_on="Player")
-        .sort_values("Ranking (ELO)"),
+        .merge(topn, left_index=True, right_on="Player"),
     ]
-).pipe(
-    lambda _: ggplot(
-        _, aes(y="cp_mean", x="reorder(Player,ELO)", color="color", size="cp_std")
-    )
-    + geom_point()
-    + theme_minimal()
-    + scale_color_grey()
-    + theme(axis_text_x=element_text(angle=20))
-)
+).sort_values("Ranking (ELO)")
+
 
 
 # General One
@@ -378,20 +368,21 @@ long_cp = pandas.concat(
     ]
 )
 
+
 long_cp.apply(lambda x: pandas.to_numeric(x) if x.name == "value" else x).pipe(
     lambda _: ggplot(_, aes(x="value"))
     + geom_density(aes(fill="variable"), alpha=0.4)
     + facet_wrap("Label")
-    + xlim(-1, 1)
     + theme_minimal()
     + scale_fill_brewer()
 )
+
 
 long_cp.query('Label != "Beginner"').groupby("ELO").agg(
     var=("value", numpy.std), mean=("value", numpy.mean)
 ).reset_index().pipe(
     lambda _: ggplot(_, aes(x="ELO", y="mean"))
-    + geom_point(alpha=0.4)
+    + geom_point(alpha=0.4
     + geom_smooth()
     + ylim(0, 100)
 )
@@ -410,5 +401,62 @@ long_cp.query('Label != "Beginner"').groupby("ELO").agg(
 long_cp.groupby("Label").agg(mean=("value", numpy.mean), std=("value", numpy.std))
 
 
-# TODO: COUPLE MORE GRAPHS
-# TODO : MODEL
+
+
+
+# Model
+
+
+# Mean CP LOSS
+# Std CP loss
+# Difference in opponents ELO
+# Moves
+# White or Black
+
+black_values = (
+    data.melt(
+        value_vars=["Black CP Loss List"],
+    )
+    .explode("value")
+    .reset_index()
+    .rename(columns={"index": "game_number"})
+    .groupby("game_number")
+    .agg(mean=("value", numpy.mean), std=("value", numpy.std))
+)
+
+black_filter = (
+    data.reset_index()
+    .rename(columns={"index": "game_number"})
+    .filter(["btwdiff", "Moves", "black_elo"])
+    .assign(color="black")
+    .rename(columns={"btwdiff": "diff", "black_elo": "elo"})
+)
+
+
+white_values = (
+    data.melt(
+        value_vars=["White CP Loss List"],
+    )
+    .explode("value")
+    .reset_index()
+    .rename(columns={"index": "game_number"})
+    .groupby("game_number")
+    .agg(mean=("value", numpy.mean), std=("value", numpy.std))
+)
+
+white_filter = (
+    data.reset_index()
+    .rename(columns={"index": "game_number"})
+    .filter(["wtbdiff", "Moves", "white_elo"])
+    .assign(color="white")
+    .rename(columns={"wtbdiff": "diff", "white_elo": "elo"})
+)
+
+
+model_df = pandas.concat(
+    [
+        pandas.merge(black_values, black_filter, left_index=True, right_index=True),
+        pandas.merge(white_values, white_filter, left_index=True, right_index=True),
+    ]
+)
+

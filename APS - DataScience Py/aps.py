@@ -3,7 +3,7 @@ import matplotlib.pyplot
 import plotnine
 from plotnine import *
 
-data = pandas.read_csv("10411_games_with_centipawn_metrics.csv")
+data = pandas.read_csv("APS - DataScience Py/10411_games_with_centipawn_metrics.csv")
 data = data.drop(
     ["Unnamed: 0", "White Expected Rating by ACPL", "Black Expected Rating by ACPL"],
     axis=1,
@@ -77,7 +77,6 @@ pd = (
 )
 
 pd = pd.div(pd.sum(axis=1), axis=0).fillna(0)
-
 teste = pd.stack().reset_index()
 teste.columns = ["White Label", "Black Label", "Result", "count"]
 teste["Comb"] = (

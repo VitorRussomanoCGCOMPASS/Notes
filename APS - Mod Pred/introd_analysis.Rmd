@@ -1,0 +1,16 @@
+
+```{r} 
+
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("ggthemes")
+library("tidyverse")
+
+
+data  <- read.csv("APS - Mod Pred/california.csv")
+data<- as_tibble(data)
+
+
+
+```
