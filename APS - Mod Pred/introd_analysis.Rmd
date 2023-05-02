@@ -1,4 +1,6 @@
 
+
+## Overview
 ```{r} 
 
 library("dplyr")
@@ -8,9 +10,517 @@ library("ggthemes")
 library("tidyverse")
 
 
-data  <- read.csv("APS - Mod Pred/california.csv")
-data<- as_tibble(data)
+
+data <- read.csv("APS - Mod Pred/california.csv", stringsAsFactors = TRUE)
+data <- as_tibble(data)
 
 
+summary(data)
+```
+
+## Breaking down dataset features
+
+
+
+
+
+
+
+## Analysis of Median House Value based on features
+### Longitude & Latitude
+
+```{r}
+library("mapdata") # Supplement to maps package
+
+
+california <- subset(map_data("state"), region == "california")
+
+ggplot(data = california, mapping = aes(x = long, y = lat)) +
+    geom_polygon(colour = "black", fill = "white", alpha = 0.2) +
+    geom_point(
+        data = data, aes(
+            x = longitude, y = latitude, colour = median_house_value
+        ),
+        alpha = 0.4
+    ) +
+    scale_colour_continuous() +
+    xlab("Longitude") +
+    ylab("Latitude") +
+    ggtitle("California Map: Median House Price") +
+    theme_bw() +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    )
+```
+
+
+## Ocean Proximity
+
+```{r}
+library("ggridges")
+library("scales")
+
+ggplot(data = california, mapping = aes(x = long, y = lat)) +
+    geom_polygon(colour = "black", fill = "white", alpha = 0.2) +
+    geom_point(data = data, aes(x = longitude, y = latitude, color = ocean_proximity), alpha = 0.4, size = 2) +
+    scale_color_viridis_d() +
+    xlab("Longitude") +
+    ylab("Latitude") +
+    ggtitle("Map of California: Ocean Proximity") +
+    theme_bw() +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    )
+
+
+ggplot(data, aes(x = median_house_value, y = ocean_proximity, fill = ocean_proximity)) +
+    geom_density_ridges_gradient() +
+    scale_fill_brewer() +
+    theme_bw() +
+    labs(title = "Median House Price by Ocean Proximity", x = "Median house value (in thousands)", y = "Ocean proximity") +
+    scale_x_continuous(
+        breaks = round(seq(min(data$median_house_value), max(data$median_house_value), length.out = 8), 3),
+        labels = scales::dollar_format(scale = .001, prefix = "$")
+    ) +
+    theme(
+        legend.position = "none",
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    )
+```
+
+
+
+
+
+# Feature engineering
+
+
+
+```{r}
+cali_cities <- read.csv(
+    "APS - Mod Pred/cal_cities_lat_long.csv",
+    stringsAsFactors = TRUE
+)
+cali_pop <- read.csv(
+    "APS - Mod Pred/cal_populations_city.csv",
+    stringsAsFactors = TRUE
+)
+california_cities <- as_tibble(merge(cali_cities, cali_pop, by.x = "Name", by.y = "City"))
+
+
+summary(california_cities)
+```
+
+
+```{r}
+ggplot(data = california, mapping = aes(x = long, y = lat)) +
+    geom_polygon(colour = "black", fill = "white", alpha = 0.2) +
+    geom_point(
+        data = california_cities, aes(
+            x = Longitude, y = Latitude, size = pop_april_1990
+        ),
+        alpha = 0.4
+    ) +
+    scale_size_area(max_size = 25) +
+    xlab("Longitude") +
+    ylab("Latitude") +
+    ggtitle("California Map: Cities Population 1990") +
+    theme_bw() +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    )
+```
+
+
+### Appending County & City to the dataset
+```{r} 
+
+
+knn_dist <- as_tibble(FNN::get.knnx(
+    select(california_cities, "Longitude", "Latitude"),
+    select(data, "longitude", "latitude"),
+    k = 1, algorithm = c(
+        "kd_tree", "cover_tree",
+        "CR", "brute"
+    )
+)) %>% select(nn.index)
+
+knn_dist <- as_tibble(as.data.frame(knn_dist$nn.index))
+
+
+data$city <- california_cities$Name[match(knn_dist$V1, rownames(california_cities))]
+
+data <- merge(data,
+    california_cities %>%
+        select(Name, pop_april_1990, County),
+    by.x = "city", by.y = "Name"
+) %>%
+    as_tibble(.)
+```
+
+### County impact
+```{r}
+
+
+california_counties <- subset(map_data("county"), region == "california")
+california_counties$subregion <- as.character(california_counties$subregion)
+
+county_labels <- california_counties %>%
+    group_by(subregion) %>%
+    summarize_at(vars(long, lat), ~ mean(range(.)))
+
+
+data %>%
+    group_by(County) %>%
+    summarise_at(vars(median_house_value), funs(mean)) %>%
+    ungroup() %>%
+    rename_at("County", ~"subregion") %>%
+    mutate(subregion = as.character(tolower(subregion))) %>%
+    inner_join(california_counties, .) %>%
+    mutate(subregion = stringr::str_to_sentence(subregion)) -> california_counties
+
+
+ggplot(data = california, mapping = aes(x = long, y = lat)) +
+    coord_fixed(1.3) +
+    geom_polygon(color = "black", fill = NA) +
+    geom_polygon(data = california_counties, color = "black", aes(fill = median_house_value, group = group)) +
+    scale_fill_gradient(trans = "log10") +
+    labs(title = "Median House Value by County", x = "Longitude", y = "Latitude") +
+    theme_bw() +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    ) +
+    geom_text(data = county_labels, aes(label = stringr::str_to_title(subregion), x = long, y = lat), color = "white", size = 3.5, fontface = "bold")
+```
+
+
+### Population 
+* Block Population
+* City Population
+* 300km Radius Population
+
+```{r}
+
+
+knn_radius <- as_tibble(FNN::get.knnx(
+    select(california_cities, "Longitude", "Latitude"),
+    select(data, "longitude", "latitude"),
+    k = 10, algorithm = c(
+        "kd_tree", "cover_tree",
+        "CR", "brute"
+    )
+))
+
+as_tibble(as.data.frame(knn_radius$nn.dist)) -> knn_radius_dist
+as_tibble(as.data.frame(knn_radius$nn.index)) -> knn_radius_index
+
+
+knn_radius_dist[knn_radius_dist > 0.3] <- NA
+knn_radius_index[is.na(knn_radius_dist)] <- NA
+
+
+california_cities %>%
+    mutate(., rownumber = row_number()) %>%
+    select(rownumber, pop_april_1990) -> a
+
+data$radius_pop <- lapply(knn_radius_index, function(x) a$pop_april_1990[match(x, a$rownumber)]) %>%
+    as.data.frame(.) %>%
+    rowSums(., na.rm = TRUE)
+
+library(gridExtra)
+
+
+p1 <- ggplot(data, aes(x = population, y = median_house_value)) +
+    stat_density_2d(aes(fill = ..level..), geom = "polygon", colour = "white", bins = 4)
+
+p2 <- ggplot(data, aes(x = pop_april_1990, y = median_house_value)) +
+    stat_density_2d(aes(fill = ..level..), geom = "polygon", colour = "white", bins = 4)
+
+p3 <- ggplot(data, aes(x = radius_pop, y = median_house_value)) +
+    stat_density_2d(aes(fill = ..level..), geom = "polygon", colour = "white", bins = 4)
+
+plist <- list(p1, p2, p3)
+
+grid.arrange(grobs = plist, top = "Population and Median House Price", ncol = 3)
+```
+
+
+## Temperature & Precipitation
+
+```{r}
+library("openxlsx")
+library("cowplot")
+
+precipitation <- as.data.frame(read.xlsx("APS - Mod Pred/4-pcp-199004-1.xlsx")) %>%
+    select(Location, Value) %>%
+    rename(., mean_prec = Value)
+
+temp <- as.data.frame(read.xlsx("APS - Mod Pred/4-tavg-199004-1.xlsx")) %>%
+    select(Location, Value) %>%
+    rename(., mean_temp = Value)
+
+
+climate <- merge(temp, precipitation, by = "Location") %>%
+    mutate_at(vars(Location), function(x) gsub("County", "", x)) %>%
+    mutate_at(vars(Location), function(x) gsub("^ +| +$|( ) +", "\\1", x)) %>%
+    mutate_at(vars(mean_temp, mean_prec), function(x) as.double(x))
+
+
+
+
+# create 3 buckets
+quantiles_temp <- climate %>%
+    pull(mean_temp) %>%
+    quantile(probs = seq(0, 1, length.out = 4))
+
+quantiles_prec <- climate %>%
+    pull(mean_prec) %>%
+    quantile(probs = seq(0, 1, length.out = 4))
+
+
+
+# create color scale that encodes two variables
+# red for temperature and blue for mean precipitation
+# the special notation with gather is due to readibility reasons
+bivariate_color_scale <- tibble(
+    "3 - 3" = "#3F2949", # high temp , high precipitation
+    "2 - 3" = "#435786",
+    "1 - 3" = "#4885C1", # low temp, high precipitation
+    "3 - 2" = "#77324C",
+    "2 - 2" = "#806A8A", # medium temp, medium precipitation
+    "1 - 2" = "#89A1C8",
+    "3 - 1" = "#AE3A4E", # high temp, low precipitation
+    "2 - 1" = "#BC7C8F",
+    "1 - 1" = "#CABED0" # low temp, low precipitation
+) %>%
+    gather("group", "fill")
+
+
+
+
+climate %>%
+    mutate(
+        temp_quantiles = cut(
+            mean_temp,
+            breaks = quantiles_temp,
+            include.lowest = TRUE
+        ),
+        prec_quantiles = cut(
+            mean_prec,
+            breaks = quantiles_prec,
+            include.lowest = TRUE
+        ),
+        # by pasting the factors together as numbers we match the groups defined
+        # in the tibble bivariate_color_scale
+        group = paste(
+            as.numeric(temp_quantiles), "-",
+            as.numeric(prec_quantiles)
+        )
+    ) %>%
+    # we now join the actual hex values per "group"
+    # so each municipality knows its hex value based on the his gini and avg
+    # income value
+    left_join(bivariate_color_scale, by = "group") %>%
+    rename_at("Location", ~"subregion") %>%
+    mutate(subregion = as.character(tolower(subregion))) %>%
+    merge(california_counties, ., by.x = "subregion", by.y = "subregion") %>%
+    as_tibble(.) -> climate
+
+
+
+bivariate_color_scale %>%
+    separate(group, into = c("temp", "prec"), sep = " - ") %>%
+    mutate(
+        temp = as.integer(temp),
+        prec = as.integer(prec)
+    ) -> bivariate_color_scale
+
+
+legend <- ggplot() +
+    geom_tile(
+        data = bivariate_color_scale,
+        mapping = aes(
+            x = temp,
+            y = prec,
+            fill = fill
+        )
+    ) +
+    scale_fill_identity() +
+    labs(
+        x = "Higher Temperature ⟶️",
+        y = "Higher Precipitation ⟶️"
+    ) +
+    theme_map() +
+    # make font small enough
+    theme(
+        axis.title = element_text(size = 12),
+        axis.title.y = element_text(angle = 90, vjust = 0.5)
+    ) +
+    # quadratic tiles
+    coord_fixed()
+
+graph <- ggplot(data = california, mapping = aes(x = long, y = lat)) +
+    coord_fixed(1.3) +
+    geom_polygon(color = "black", fill = NA) +
+    geom_polygon(data = climate, color = "black", aes(fill = fill, group = group.x)) +
+    scale_fill_identity() +
+    labs(title = "County Temperature and Precipitation Bivariate", x = "Longitude", y = "Latitude") +
+    theme_bw() +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    ) +
+    geom_text(data = county_labels, aes(label = stringr::str_to_title(subregion), x = long, y = lat), color = "black", size = 4, fontface = "bold")
+
+ggdraw() +
+    draw_plot(graph, 0, 0, 1, 1) +
+    draw_plot(legend, 0.02, 0.075, 0.2, 0.2)
+```
+
+```{r}
+
+data <- merge(data %>% mutate(County = as.character(County)), climate, by.x = "County", by.y = "Location")
+
+p1 <- data %>%
+    group_by(mean_temp) %>%
+    summarise(mean_temp_median_house_value = mean(median_house_value)) %>%
+    ggplot(., aes(x = mean_temp, mean_temp_median_house_value)) +
+    geom_point() +
+    geom_line() +
+    geom_smooth(method = "loess") +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    ) +
+    labs(title = "House Values by Mean Temperature 1990", x = "Temperature in April 1990", y = "House Values") +
+    theme_bw()
+
+p2 <- data %>%
+    group_by(mean_prec) %>%
+    summarise(mean_prec_median_house_value = mean(median_house_value)) %>%
+    ggplot(., aes(x = mean_prec, mean_prec_median_house_value)) +
+    geom_point() +
+    geom_line() +
+    geom_smooth(method = "loess") +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    ) +
+    labs(title = "House Values by Mean Precipitation 1990 ", x = "Precipitation in April 1990", y = "House Values") +
+    theme_bw()
+
+
+
+plist2 <- list(p1, p2)
+grid.arrange(grobs = plist2, top = "Climate and Median House Value")
+```
+
+
+```{r}
+
+library(viridis)
+
+data %>%
+group_by(mean_prec, mean_temp)%>%
+summarise(mean= mean(median_house_value), households=mean(households)) %>% 
+  arrange(desc(mean_prec)) %>%
+  ggplot(aes(x=mean_prec, y=mean_temp, size=mean,color=households)) +
+    geom_point(alpha=0.6) +
+    scale_size(range = c(.1, 30), name="Mean House Value") + 
+    theme_bw() +
+    labs(title="House Values, Climate and Number of Households", x='Mean Precipitation 1990', y='Mean Temperature 1990') + theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    )
 
 ```
+
+
+
+## BEDROOMS & ROOMS 
+```{r}
+
+data %>%
+    mutate(total_bedrooms_cat = cut(total_bedrooms,
+        breaks = c(seq(min(data$total_bedrooms), max(data$total_bedrooms), length.out = 10)),
+        dig.lab = 5
+    )) %>%
+    mutate(
+        total_rooms_cat =
+            cut(total_rooms,
+                breaks = c(seq(min(data$total_rooms), max(data$total_rooms), length.out = 10)),
+                dig.lab = 5
+            )
+    ) %>%
+    drop_na(.) -> data
+
+
+p1 <- ggplot(data, aes(x = total_bedrooms_cat, y = median_house_value)) +
+    geom_boxplot(fill = "#3182bd") +
+    theme_bw() +
+    labs(x = "Total Number of Bedrooms", y = "Median House Price")
+
+
+
+p2 <- ggplot(data, aes(x = total_rooms_cat, y = median_house_value)) +
+    geom_boxplot(fill = "#3182bd") +
+    theme_bw() +
+    labs(x = "Total Number of Rooms ", y = "Median House Price")
+
+
+
+plist <- list(p1, p2)
+grid.arrange(grobs = plist, cols = 2, top = "Bedrooms and Rooms in block and Median House Value")
+```
+
+
+
+```{r} 
+
+data %>%
+    mutate(categorical_age = cut(
+        housing_median_age,
+        breaks = c(seq(min(housing_median_age), max(housing_median_age), 4))
+    )) %>%
+    group_by(categorical_age) %>%
+    summarise(sd = sd(median_house_value, na.rm = TRUE), median_house_value = mean(median_house_value), ) %>%
+    ggplot(., aes(x = categorical_age, y = median_house_value, fill = "black")) +
+    geom_bar(stat = "identity", fill = "#3182bd") +
+    geom_errorbar(aes(ymin = median_house_value - sd, max = median_house_value + sd), width = .2, position = position_dodge(width = 0.7)) +
+    theme_bw() +
+    theme(
+        panel.spacing = unit(0.1, "lines"),
+        strip.text.x = element_text(size = 8),
+        plot.title = element_text(face = "bold")
+    ) +
+    labs(x = "Building age brackets", y = "Median House Price", title = "Age of buildings in block and Median House Prices")
+
+```
+
+
+<div style='padding:10px; background:lightgreen;border-radius:5px'>
+    <b>Insights:</b><br />
+    - Most of the houses in this dataset has only 1 floor.<br />
+    - All the houses in this dataset has 1 to 3 floors. <br />
+    - The prices of the majority of houses with 2 floors are higher than those of 1 or 3 floors. <br />
+    - The houses with only 1 floor has the lowest average price.
+</div>
+
+
+
+# TODO : SOCIOECONOMICAL VARIABLES
+# TODO : DISTANCE TO OCEAN
